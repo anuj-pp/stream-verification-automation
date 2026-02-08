@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 Screenshot Debugger - Game Detection Analysis</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>S3 Screenshot Debugger</h1>
+            <p class="subtitle">Debug ML pipeline accuracy: Compare ML API → Post-Processing → Database</p>
+        </header>
+
+        <!-- AWS Credentials Section -->
+        <section class="credentials-section" id="credentialsSection">
+            <h2>AWS Credentials</h2>
+            
+            <!-- Paste Export Format -->
+            <div class="paste-export-section">
+                <details>
+                    <summary style="cursor: pointer; margin-bottom: 10px; color: var(--accent-primary);">
+                        💡 Quick Paste - Export Format
+                    </summary>
+                    <div style="margin-left: 20px;">
+                        <p style="color: var(--text-secondary); margin-bottom: 10px;">
+                            Paste your AWS credentials in export format:
+                        </p>
+                        <textarea 
+                            id="exportFormatPaste" 
+                            placeholder="export AWS_ACCESS_KEY_ID=&quot;YOUR_ACCESS_KEY_ID&quot;
+export AWS_SECRET_ACCESS_KEY=&quot;YOUR_SECRET_ACCESS_KEY&quot;
+export AWS_SESSION_TOKEN=&quot;YOUR_SESSION_TOKEN&quot;"
+                            style="width: 100%; min-height: 100px; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); font-family: monospace; font-size: 0.9rem;"
+                        ></textarea>
+                        <button id="parseExportBtn" class="btn-secondary" style="margin-top: 10px;">
+                            Parse and Fill Fields
+                        </button>
+                    </div>
+                </details>
+            </div>
+
+            <div class="credentials-form">
+                <div class="form-group">
+                    <label for="awsAccessKeyId">AWS Access Key ID *</label>
+                    <input type="password" id="awsAccessKeyId" placeholder="Enter AWS Access Key ID" required>
+                </div>
+                <div class="form-group">
+                    <label for="awsSecretAccessKey">AWS Secret Access Key *</label>
+                    <input type="password" id="awsSecretAccessKey" placeholder="Enter AWS Secret Access Key" required>
+                </div>
+                <div class="form-group">
+                    <label for="awsSessionToken">AWS Session Token (Optional)</label>
+                    <input type="password" id="awsSessionToken" placeholder="Enter AWS Session Token (if using SSO)">
+                </div>
+                <div class="form-group">
+                    <label for="s3BucketName">S3 Bucket Name *</label>
+                    <input type="text" id="s3BucketName" placeholder="e.g., streameranalytics-staging" value="streameranalytics-staging" required>
+                </div>
+                <div class="form-group">
+                    <label for="awsRegion">AWS Region *</label>
+                    <input type="text" id="awsRegion" placeholder="e.g., eu-west-1" value="eu-west-1" required>
+                </div>
+                <div class="form-actions">
+                    <button id="validateCredentialsBtn" class="btn-primary">Validate Credentials</button>
+                    <button id="toggleCredentialsBtn" class="btn-secondary">Show/Hide Credentials</button>
+                    <span class="credential-status" id="credentialStatus"></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- JSON Upload Section -->
+        <section class="upload-section" id="uploadSection">
+            <h2>Upload Analysis JSON</h2>
+            <div class="upload-form">
+                <div class="form-group">
+                    <label for="jsonFile">Select complete_analysis.json file *</label>
+                    <input type="file" id="jsonFile" accept=".json" required>
+                    <div class="file-info" id="fileInfo"></div>
+                </div>
+                <button id="loadJsonBtn" class="btn-primary" disabled>Load Analysis</button>
+            </div>
+        </section>
+
+        <!-- Session Info -->
+        <section class="session-info" id="sessionInfo" style="display: none;">
+            <h2>Session Information</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="label">Platform:</span>
+                    <span class="value" id="infoPlatform"></span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Channel:</span>
+                    <span class="value" id="infoChannel"></span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Date:</span>
+                    <span class="value" id="infoDate"></span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Session ID:</span>
+                    <span class="value" id="infoSessionId"></span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Total Screenshots:</span>
+                    <span class="value" id="infoTotal"></span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Discrepancies:</span>
+                    <span class="value discrepancy-count" id="infoDiscrepancies"></span>
+                </div>
+                <div class="info-item">
+                    <span class="label">Analysis Time:</span>
+                    <span class="value" id="infoAnalyzedAt"></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Filters -->
+        <section class="filters" id="filters" style="display: none;">
+            <div class="filter-group">
+                <label>
+                    <input type="checkbox" id="filterDiscrepancies">
+                    Show only discrepancies
+                </label>
+                <label>
+                    <input type="checkbox" id="filterMlVsPost">
+                    ML vs Post-Processing
+                </label>
+                <label>
+                    <input type="checkbox" id="filterPostVsDb">
+                    Post-Processing vs DB
+                </label>
+                <label>
+                    <input type="checkbox" id="filterMissingInDb">
+                    Missing in DB
+                </label>
+                <label>
+                    <input type="checkbox" id="filterExtraInDb">
+                    Extra in DB
+                </label>
+            </div>
+            <div class="filter-actions">
+                <button id="clearFiltersBtn" class="btn-secondary">Clear Filters</button>
+                <button id="exportBtn" class="btn-secondary">Export Results</button>
+            </div>
+        </section>
+
+        <!-- Main Viewer -->
+        <section class="viewer-section" id="viewerSection" style="display: none;">
+            <!-- Navigation -->
+            <div class="navigation">
+                <button id="firstBtn" class="nav-btn">⏮ First</button>
+                <button id="prevBtn" class="nav-btn">← Previous</button>
+                <div class="screenshot-counter">
+                    <span id="currentIndex">0</span> / <span id="totalCount">0</span>
+                </div>
+                <button id="nextBtn" class="nav-btn">Next →</button>
+                <button id="lastBtn" class="nav-btn">Last ⏭</button>
+                <div class="jump-to">
+                    <label for="jumpToIndex">Jump to:</label>
+                    <input type="number" id="jumpToIndex" min="1" placeholder="Index">
+                    <button id="jumpBtn" class="btn-secondary">Go</button>
+                </div>
+            </div>
+
+            <!-- Comparison Grid -->
+            <div class="comparison-grid">
+                <!-- Screenshot Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Screenshot</h3>
+                        <label class="toggle-bbox">
+                            <input type="checkbox" id="showBoundingBoxes">
+                            Show Bounding Boxes
+                        </label>
+                    </div>
+                    <div class="card-body">
+                        <div class="screenshot-container">
+                            <canvas id="screenshotCanvas"></canvas>
+                            <img id="screenshotImg" style="display: none;">
+                            <div class="loading-spinner" id="imageLoader" style="display: none;">Loading...</div>
+                        </div>
+                        <div class="screenshot-metadata">
+                            <div><strong>Timestamp:</strong> <span id="screenshotTimestamp"></span></div>
+                            <div><strong>Filename:</strong> <span id="screenshotFilename"></span></div>
+                            <div><strong>Index:</strong> <span id="screenshotIndex"></span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ML Inference Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>ML API Detection</h3>
+                        <span class="status-badge" id="mlStatus"></span>
+                    </div>
+                    <div class="card-body">
+                        <div id="mlContent" class="result-content"></div>
+                    </div>
+                </div>
+
+                <!-- Post-Processing Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Post-Processing</h3>
+                        <span class="status-badge" id="postStatus"></span>
+                    </div>
+                    <div class="card-body">
+                        <div id="postContent" class="result-content"></div>
+                    </div>
+                </div>
+
+                <!-- Database Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Database Records</h3>
+                        <span class="status-badge" id="dbStatus"></span>
+                    </div>
+                    <div class="card-body">
+                        <div id="dbContent" class="result-content"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Discrepancy Summary -->
+            <div class="discrepancy-alert" id="discrepancyAlert" style="display: none;">
+                <h4>⚠ Discrepancies Detected</h4>
+                <div id="discrepancyDetails"></div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="timeline-section">
+                <h3>Timeline</h3>
+                <div class="timeline-controls">
+                    <label>
+                        <input type="checkbox" id="highlightDiscrepancies" checked>
+                        Highlight Discrepancies
+                    </label>
+                </div>
+                <div class="timeline-container">
+                    <div class="timeline-track" id="timelineTrack"></div>
+                </div>
+                <div class="timeline-legend">
+                    <div class="legend-item">
+                        <span class="legend-color match"></span>
+                        <span>All Match</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color discrepancy"></span>
+                        <span>Has Discrepancy</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color current"></span>
+                        <span>Current</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- AWS SDK -->
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1586.0.min.js"></script>
+    
+    <!-- Application Scripts -->
+    <script src="js/aws-config.js"></script>
+    <script src="js/s3-client.js"></script>
+    <script src="js/json-parser.js"></script>
+    <script src="js/discrepancy.js"></script>
+    <script src="js/comparison.js"></script>
+    <script src="js/viewer.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
